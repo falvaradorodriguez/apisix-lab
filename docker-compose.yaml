@@ -1,0 +1,79 @@
+services:
+    etcd:
+        image: bitnami/etcd:latest
+        container_name: etcd
+        environment:
+            - ETCD_ENABLE_V2=true
+            - ALLOW_NONE_AUTHENTICATION=yes
+            - ETCD_ADVERTISE_CLIENT_URLS=http://etcd:2379
+            - ETCD_LISTEN_CLIENT_URLS=http://0.0.0.0:2379
+        volumes:
+            - etcd_data:/bitnami/etcd
+        ports:
+            - "2379:2379"
+        networks:
+            - apisix
+
+    apisix:
+        image: apache/apisix:latest
+        container_name: apisix
+        depends_on:
+            - etcd
+        volumes:
+            - ./apisix/conf/config.yaml:/usr/local/apisix/conf/config.yaml:ro
+        ports:
+        - "9180:9180/tcp"
+        - "9080:9080/tcp"
+        - "9091:9091/tcp"
+        - "9443:9443/tcp"
+        - "9092:9092/tcp"
+        networks:
+            - apisix
+
+    dashboard:
+        image: apache/apisix-dashboard:3.0.0-alpine
+        container_name: dashboard
+        volumes:
+            - ./apisix_dashboard/conf/conf.yaml:/usr/local/apisix-dashboard/conf/conf.yaml:ro
+        depends_on:
+            - etcd
+        ports:
+            - "9000:9000/tcp"
+        networks:
+            - apisix
+
+    fastapi:
+        build: .
+        container_name: fastapi-app
+        ports:
+            - "8000:8000"
+        volumes:
+            - .:/app
+        user: root
+        networks:
+            - apisix
+
+    keycloak:
+        image: quay.io/keycloak/keycloak:latest
+        container_name: keycloak
+        command: ["start-dev"]
+        environment:
+            - KEYCLOAK_ADMIN=admin
+            - KEYCLOAK_ADMIN_PASSWORD=admin
+            - KC_DB=dev-file
+            - KC_HOSTNAME_URL=http://keycloak:8080
+            - KC_HOSTNAME_ADMIN_URL=http://keycloak:8080
+            - KC_HOSTNAME_STRICT=false
+            - KC_HOSTNAME_STRICT_HTTPS=false
+        ports:
+            - "8080:8080"
+        networks:
+            - apisix
+
+networks:
+    apisix:
+        driver: bridge
+
+volumes:
+    etcd_data:
+        driver: local
